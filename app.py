@@ -49,25 +49,25 @@ TRAIT_LABELS = {
 }
 
 TRAIT_TOPIC_HINTS = {
-    "Extraversion": {
-        "anecdote": "休日に家でずっと一人で過ごしていると、ふと誰かと無性に話したくなって友達に連絡しちゃったこと",
-        "question_phrase": "普段のお休みは、家で一人でゆっくり過ごす時間が多いですか？誰かと会って話す時間が多いですか？"
-    },
-    "Agreeableness": {
-        "anecdote": "友達とご飯に行く時に、お互い遠慮し合って『何でもいいよ』って言ってたら全然お店が決まらなかったこと",
-        "question_phrase": "普段友達と出かけたり遊んだりする時って、行き先やお店はどうやって決めることが多いですか？"
-    },
-    "Conscientiousness": {
-        "anecdote": "旅行やお出かけの準備を前日までサボってたら、当日忘れ物だらけで大慌てしたこと",
-        "question_phrase": "お出かけや旅行の準備とか計画って、普段どんな感じで進めることが多いですか？"
-    },
     "Neuroticism": {
-        "anecdote": "楽しみにしていた予定が当日の雨で急に中止になっちゃって、ショックで一日テンションが落ちちゃったこと",
-        "question_phrase": "楽しみにしていた予定が急にダメになっちゃったり思い通りにいかない時って、どんな感じになりますか？"
+        "focus": "予期せぬトラブルや予定変更が起きた時の感情の動き、または緊張や不安の感じ方",
+        "question_phrase": "楽しみにしていた予定が急にキャンセルになったりうまくいかないことが重なった時って、気持ちの切り替えはどうやってしてますか？（もしすでにトラブルや切り替えの話を聞いている場合は、「初めての場所や大事な予定がある前って、結構緊張や心配を感じやすい方ですか？」など別の切り口で聞いてください）"
     },
     "Openness": {
-        "anecdote": "カフェやご飯屋さんに行くと、冒険できなくて結局いつも同じお気に入りのメニューばっかり頼んじゃうこと",
-        "question_phrase": "見たことない限定メニューや珍しい新商品があったら、気になって試してみたくなったりしますか？"
+        "focus": "新しいジャンルや未知の体験への踏み出し方・好奇心の向け方",
+        "question_phrase": "普段、まったく知らないジャンルのものや、やったことない体験に誘われたりした時って、どんな感じで受け止めることが多いですか？（もしすでに挑戦や興味の話を聞いている場合は、「旅行やご飯などで、いつも決まった定番を選ぶことが多いですか？それとも新しいお店を開拓するのが好きですか？」など別の切り口で聞いてください）"
+    },
+    "Extraversion": {
+        "focus": "休日や空き時間の過ごし方・誰かと過ごすことへの感覚",
+        "question_phrase": "お休みの日はどんなふうに過ごすことが多いですか？（もしすでに休日の話を聞いている場合は、「一人で静かに集中している時間と、誰かと賑やかに過ごす時間、どちらがリフレッシュしやすいですか？」など別の切り口で聞いてください）"
+    },
+    "Agreeableness": {
+        "focus": "友人や知人と一緒に動く時の意思決定・場のまとめ方",
+        "question_phrase": "友達とご飯に行ったりお出かけする時って、お店や行き先ってどうやって決めることが多いですか？（もしすでに決める際の話を聞いている場合は、「グループで意見が分かれた時って、自分の好みを主張する方ですか？それとも周りの希望を優先することが多いですか？」など別の切り口で聞いてください）"
+    },
+    "Conscientiousness": {
+        "focus": "物事への取り組み方・計画の立て方（旅行や日頃の作業など）",
+        "question_phrase": "旅行とか遠出する時って、前もってプランをしっかり立てる方ですか？それとも現地についてから決めることの方が多いですか？（もしすでに計画性の話を聞いている場合は、「普段のやらなければいけない課題や予定は、前もって早めに片付けるタイプですか？それとも締め切りギリギリに進めるタイプですか？」など別の切り口で聞いてください）"
     }
 }
 
@@ -138,43 +138,49 @@ if 'analysis_status' not in st.session_state:
     }
 if 'is_dialogue_finished' not in st.session_state:
     st.session_state.is_dialogue_finished = False
+if 'current_topic_trait' not in st.session_state:
+    st.session_state.current_topic_trait = None  # 現在掘り下げ中の特性を追跡
+if 'asked_topics' not in st.session_state:
+    st.session_state.asked_topics = []  # 一度転換先に指定した特性を記録（同じ質問の繰り返し防止）
 
 if 'gemini_chat_session' not in st.session_state:
     # インタビュアーとしてのシステムプロンプトを定義
     system_instruction = """あなたは、相手と楽しく自然に雑談をする対話パートナーです。
-親しみやすく丁寧な会話を通じて、相手の日常の具体的なエピソードや体験談を引き出してください。
+親しみやすく丁寧な会話を通じて、相手の日常の行動パターンや物事への接し方を自然に引き出してください。
 
 # 会話の絶対ルール
 
-1. **相手の話したテーマをしっかり受け止めて深掘りする（最重要）:**
-   相手が出してくれた話題（ゲーム、趣味、仕事、旅行など）に対して、すぐに「〜以外だと何してますか？」のように話題を切り捨てることは絶対に禁止です。
-   相手の言葉に純粋な興味を持ち、まずは「具体的にどんなことをしているのか」「最近で特に印象に残っている具体的な出来事や場面はどんな時だったか」を丁寧に掘り下げてください。
-   ※自分から勝手に別の話題に切り替えてはいけません。1つのテーマについて具体的な体験談が出るまでじっくり会話を続けてください。
+1. **相手の発言内容をしっかり踏まえて「一歩先」へ展開する（最重要）:**
+   相手が答えてくれた内容（行動や体験）を無視して同じ質問を繰り返す（堂々巡り）ことは絶対に禁止です。
+   「すでに答えてもらったこと」を受け止め、その時の気持ちや、普段の対人スタンス・物事の進め方へと自然に話を展開してください。
 
-2. **口調は「親しみやすい丁寧語（です・ます調）」に統一:**
-   タメ口やくだけすぎた口調（「〜だよね」「〜したんじゃない？」「（笑）」など）は禁止です。
-   「〜ですよね！」「〜でしたか？」「確かにそれは熱くなりますね」のように、礼儀正しさと親しみやすさを両立した【です・ます調】で話してください。
+2. **名詞や事実だけの無意味な掘り下げを禁止:**
+   店名、料理のメニュー名、場所、スペック、設定確認など、性格に関係のない単なる事実を聞き出すことは禁止です。
+   「その時どう感じたか」「普段人と接する時に何を大切にしているか」「物事に取り組むときのこだわり」など、相手の価値観や行動のスタンスを掘り下げてください。
 
-3. **2択質問や「〜なタイプですか？」の絶対禁止:**
-   「A派ですか？B派ですか？」「〜なタイプですか？」と白黒の選択を迫る質問は心理テストのようになるため禁止です。相手自身の言葉で自由に答えられるオープンな聞き方をしてください。
+3. **質問は1回の発言に必ず1つだけ（二重質問や勝手な自己完結の厳禁）:**
+   「Aでしたか？ところで私は〜」のように、1つの発言の中で質問を投げながら相手の返事を待たずに別の話へ進めたり、質問を2つ同時に投げたりしてはいけません。
 
-4. **「最近の具体的な出来事・エピソード」を聞く:**
-   「最近やってて、一番盛り上がった瞬間や焦った場面ってどんな時でしたか？」「その時は具体的にどんな対応をしたんですか？」のように、実際の体験談や行動を聞いてください。
+4. **口調は「親しみやすい丁寧語（です・ます調）」に統一:**
+   タメ口や砕けすぎた口調は禁止です。
+   「〜ですよね！」「〜でしたか？」「確かにそれは共感できます」のように、礼儀正しさと親しみやすさを両立した【です・ます調】で短くスッキリ（2〜3文程度）話してください。
 
-5. **返答は短くスッキリさせる（長文の語りや先回りの禁止）:**
-   軽い相槌や共感をサラッと1〜2行で伝え、すぐに相手に話を振るようにして、会話のキャッチボールのテンポを良くしてください。
+5. **性格診断・感情分析のような質問の禁止:**
+   以下のような聞き方は絶対に禁止です。
+   ❌ 「大切にしていることは何ですか？」「こだわりはありますか？」（直接的な性格・価値観の問い）
+   ❌ 「どんなふうにワクワク感を味わいますか？」「その感情をどう処理しますか？」（感情をメタ的に分析させる問い）
+   ❌ 「そのとき何を感じましたか？」「気持ちはどうでしたか？」（感情の言語化を強要する問い）
+   
+   ✅ 代わりに、**具体的な日常の出来事・行動・次の体験**を入口にしてください。
+   例：「旅行前って前もって調べる方ですか？」「友達と集まる時どうやって行き先決めてますか？」「そういえば最近それ以外で気になってることってありますか？」
 
-6. **オウム返しの厳禁:**
-   相手の言葉を「〇〇なんですね！」と機械的に復唱するのを禁止します。
+6. **自分から会話を終わらせることの絶対禁止:**
+   「ありがとうございました」「それでは終わりにしましょう」「今日はたくさんお話しできました」など、会話を締めくくる・終了を示唆するいかなる発言も絶対にしてはいけません。
+   会話の終了はシステム側が決定します。あなたは常に次の質問を1つだけ返し続けてください。【システム指示: 対話終了】が届いた場合のみ、締めくくり発言が許可されます。
 
-7. **無味乾燥なスペック・環境確認の禁止:**
-   「機種は何ですか？」「何時間やりますか？」といった設定確認は禁止です。
-
-8. **不自然なカタカナ・分析用語の禁止:**
-   「クールダウン」「ルーティン」「モチベーション」といった横文字や、面接・心理分析を想起させる言葉は使わないでください。
-
-9. **質問は1回に1つだけ:**
-   相手が気軽に答えられるよう、1回の発言に質問は必ず1つだけにしてください。
+7. **過去に尋ねた質問やトピックの重複質問を絶対に禁止:**
+   過去の会話履歴を必ず確認し、一度聞いたテーマ（例: 予定のキャンセルや気持ちの切り替え、休日の過ごし方、旅行の計画など）と同じ、または極めて類似した質問をもう一度投げかけることは絶対に禁止です。
+   同じ特性に関する話題であっても、必ず別の切り口（別の場面や体験）から質問してください。
 
 # 開始
 システムから「開始」とメッセージが送られたら、以下のように挨拶して会話を始めてください：
@@ -204,7 +210,7 @@ if st.session_state.step == 'consent':
     1. **心理テストへの回答（約2分）**  
        簡単な10問の性格診断アンケート（TIPI-J）にお答えいただきます。
     2. **AIとの気軽な雑談・対話（約5〜8分）**  
-       AIインタビュアーからの質問に、普段のご自身の様子や休日の過ごし方などを思い浮かべながらリラックスしてお答えください（堅苦しい面接ではなく、自然な日常会話です）。
+       AIインタビュアーからの質問に、普段のご自身の様子や休日の過ごし方などを思い浮かべながらリラックスしてお答えください。
     3. **分析結果の確認とアンケート（約3分）**  
        AIによって推定されたあなたの性格特性スコアや、そのように判断した詳しい理由をご確認いただき、簡単な評価アンケートにお答えいただいて終了となります。
 
@@ -273,20 +279,22 @@ elif st.session_state.step == 'chat':
     # --- テスト用のサイドバー操作パネル ---
     with st.sidebar:
         st.markdown("### 📊 リアルタイム観測状況")
-        st.caption("3往復ごとに裏でCoPE正規パイプライン（ステップ2〜5）を実行して更新されます。")
+        st.caption("4往復ごと（または情報が揃った場合は早めに）話題を転換しながら解析が更新されます。")
         for t_key, t_label in TRAIT_LABELS.items():
             if t_key in observed:
                 st.markdown(f"✅ **{t_label}**: 観測済み")
             else:
                 st.markdown(f"⏳ **{t_label}**: 未観測")
         st.write(f"**独立根拠（FC）数**: {fc_count} 件")
-        st.write(f"**現在の話題の進捗**: {st.session_state.topic_turn_count} / 3 往復")
+        st.write(f"**現在の話題の進捗**: {st.session_state.topic_turn_count} / 4 往復")
 
         st.divider()
         st.markdown("### 操作メニュー")
         if st.button("対話のみリセット（チャットを最初から）"):
             st.session_state.chat_messages = []
             st.session_state.topic_turn_count = 0
+            st.session_state.current_topic_trait = None
+            st.session_state.asked_topics = []
             st.session_state.is_dialogue_finished = False
             st.session_state.analysis_status = {
                 "observed_traits": [],
@@ -308,26 +316,26 @@ elif st.session_state.step == 'chat':
         st.markdown("### 手動での対話終了")
         if st.button("✅ 対話を終了して分析する", type="primary",
                      disabled=(len(st.session_state.chat_messages) == 0)):
-            utterances = []
-            for i, msg in enumerate(st.session_state.chat_messages):
-                speaker = "system" if msg["role"] == "assistant" else "user"
-                utterances.append({
-                    "utterance_id": f"U{i+1:03d}",
-                    "speaker": speaker,
-                    "text": msg["content"]
+            # まずAIに締めくくり発話をさせて、チャット画面に表示する
+            finish_instruction = (
+                "【システム指示: 対話終了】\n"
+                "相手のこれまでの話に短く1文で共感し、"
+                "「たくさんお話を聞かせていただきありがとうございました！"
+                "それではここでインタビューを終了しますね。"
+                "画面下の「性格分析結果を確認する」ボタンから分析結果をご確認ください。」"
+                "という主旨で、温かく対話を締めくくってください。"
+            )
+            try:
+                fin_resp = st.session_state.gemini_chat_session.send_message(finish_instruction)
+                fin_text = extract_gemini_response_text(fin_resp)
+                st.session_state.chat_messages.append({"role": "assistant", "content": fin_text})
+            except Exception:
+                st.session_state.chat_messages.append({
+                    "role": "assistant",
+                    "content": "たくさんお話を聞かせていただきありがとうございました！それでは分析結果をご確認ください。"
                 })
-
-            with st.spinner("分析中です。しばらくお待ちください...（数分かかる場合があります）"):
-                try:
-                    result = pipeline.run_cope_pipeline(
-                        utterances=utterances,
-                        session_id=st.session_state.get("subject_id", "unknown")
-                    )
-                    st.session_state.pipeline_result = result
-                    st.session_state.step = 'result_score_only'
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"分析中にエラーが発生しました。詳細: {e}")
+            st.session_state.is_dialogue_finished = True
+            st.rerun()
     # ----------------------------------
     
     if not gemini_api_key:
@@ -374,16 +382,83 @@ elif st.session_state.step == 'chat':
             # ユーザーの入力欄
             user_input = st.chat_input("ここに回答を入力してください...")
             if user_input:
+                # ユーザーの発言を履歴に追加・画面描画
                 st.session_state.chat_messages.append({"role": "user", "content": user_input})
-                st.session_state.topic_turn_count += 1
                 with st.chat_message("user"):
                     st.markdown(user_input)
-                    
-                # Geminiから通常の返答を取得
+                
+                # --- 話題転換ロジック（2段階制）---
+                # ・強制転換（4往復 or 現トピック特性が既に観測済みで2往復以上）
+                # ・ソフト誘導（2往復目、まだ未観測なら「タイミングがよければ移行して」と軽くヒントのみ）
+                prompt_to_send = user_input
+                turn_count = st.session_state.topic_turn_count
+                current_trait = st.session_state.current_topic_trait
+                observed_now = st.session_state.analysis_status.get("observed_traits", [])
+                unobserved_now = st.session_state.analysis_status.get("unobserved_traits", [])
+                priority_order = ["Neuroticism", "Openness", "Extraversion", "Agreeableness", "Conscientiousness"]
+                asked_topics = st.session_state.asked_topics  # 一度転換済みの話題リスト
+
+                # 転換先の特性を決める（未観測 & まだ質問していない中で優先度が高いもの）
+                # まず「未観測 かつ 未質問」のものを探す。なければ「未質問」だけで探す
+                next_target = next(
+                    (t for t in priority_order if t in unobserved_now and t not in asked_topics), None
+                )
+                if not next_target:
+                    # 全部聞いた or 全部観測済み → 未観測から再挑戦
+                    next_target = next((t for t in priority_order if t in unobserved_now), None)
+                if not next_target:
+                    next_target = unobserved_now[0] if unobserved_now else priority_order[0]
+
+                # 強制転換すべき条件
+                force_switch = (
+                    turn_count >= 4  # 4往復超えたら強制
+                    or (turn_count >= 2 and current_trait is not None and current_trait in observed_now)
+                    # ↑現トピックの特性データが取れていたら2往復で早期転換OK
+                )
+                # ソフト誘導すべき条件（強制ではないが次の話題を意識させる）
+                soft_nudge = (turn_count == 2 and not force_switch and next_target is not None)
+
+                did_force_switch = False  # このターンで強制転換したかのフラグ（終了判定スキップ用）
+
+                if force_switch:
+                    hint_data = TRAIT_TOPIC_HINTS.get(next_target, TRAIT_TOPIC_HINTS["Neuroticism"])
+                    focus_theme = hint_data["focus"]
+                    q_phrase = hint_data["question_phrase"]
+                    prompt_to_send = (
+                        f"【相手の発言】: {user_input}\n\n"
+                        f"【システム指示: 話題の転換】\n"
+                        f"相手の発言に短く1文で共感・相槌を打ってください（直前の話題への質問は絶対に禁止です）。\n"
+                        f"その上で、ぎこちない自分語りのエピソードは挟まず、「話題は少し変わるのですが〜」「ところで〜」と自然に切り出して、以下の新しいテーマについて相手に質問してください。\n"
+                        f"・聞きたいテーマ: 「{focus_theme}」\n"
+                        f"・質問のイメージ: 「{q_phrase}」\n"
+                        f"★最重要注意: 過去の対話履歴で既に似たような質問（例: 予定のキャンセルや気持ちの切り替えなど）をしている場合は、同じ質問を絶対に繰り返さず、必ず括弧内に記載された別の切り口や別の場面で質問してください。\n"
+                        f"※質問は必ずこの新しい話題の1つだけにしてください。全体で2〜3文のシンプルで自然な会話にしてください。"
+                    )
+                    st.session_state.topic_turn_count = 0
+                    st.session_state.current_topic_trait = next_target
+                    if next_target not in st.session_state.asked_topics:
+                        st.session_state.asked_topics.append(next_target)
+                    did_force_switch = True  # 強制転換フラグON
+                elif soft_nudge:
+                    hint_data = TRAIT_TOPIC_HINTS.get(next_target, TRAIT_TOPIC_HINTS["Neuroticism"])
+                    focus_theme = hint_data["focus"]
+                    prompt_to_send = (
+                        f"{user_input}\n\n"
+                        f"【システム参考情報（強制ではありません）】\n"
+                        f"現在の会話から得られる情報が十分であれば、「{focus_theme}」に関する話題へ"
+                        f"自然なタイミングで移行していただくと良いです。\n"
+                        f"ただし、相手がまだ話している途中や、今の話題をもう少し掘り下げられそうな場合は"
+                        f"引き続き今の話題を続けてください。移行する場合も唐突にならないよう自然に繋げてください。"
+                    )
+                    st.session_state.topic_turn_count += 1
+                else:
+                    st.session_state.topic_turn_count += 1
+                
+                # Geminiから返答を取得（1回の入力に対して必ず1回だけ返答！）
                 with st.chat_message("assistant"):
                     with st.spinner("入力中..."):
                         try:
-                            response = st.session_state.gemini_chat_session.send_message(user_input)
+                            response = st.session_state.gemini_chat_session.send_message(prompt_to_send)
                             response_text = extract_gemini_response_text(response)
                             st.markdown(response_text)
                             st.session_state.chat_messages.append({"role": "assistant", "content": response_text})
@@ -397,79 +472,40 @@ elif st.session_state.step == 'chat':
                             st.error("エラーが発生しました。数十秒待ってから再度送信してください。詳細: " + str(e))
                             st.stop()
                 
-                # 3往復（またはそれ以上）に達した場合、裏で中間解析を実行（案B）
-                if st.session_state.topic_turn_count >= 3:
-                    with st.spinner("対話ログの分析状況を確認しています..."):
-                        utterances = []
-                        for i, msg in enumerate(st.session_state.chat_messages):
-                            speaker = "system" if msg["role"] == "assistant" else "user"
-                            utterances.append({
-                                "utterance_id": f"U{i+1:03d}",
-                                "speaker": speaker,
-                                "text": msg["content"]
-                            })
-                        
-                        # ステップ2〜5の正規パイプラインを高速実行
-                        analysis_res = pipeline.run_intermediate_analysis(utterances)
-                        st.session_state.analysis_status = analysis_res
-                        
-                        user_turns = len([u for u in utterances if u["speaker"] == "user"])
-                        is_ready = analysis_res.get("is_ready_to_finish", False) or (user_turns >= 8)
-                        
-                        if is_ready:
-                            # 終了条件達成！締めくくりの発話を生成
-                            finish_instruction = (
-                                "【システム指示: 対話終了】\n"
-                                "十分な性格判断情報が集まりました。相手の先ほどの発言に優しく共感・相槌を打った上で、"
-                                "「たくさんお話を聞かせていただきありがとうございました！あなたの普段の様子や考え方がよく分かりました。"
-                                "それではここでインタビューを終了し、分析結果を作成しますね。画面下のボタンから分析結果をご確認ください。」"
-                                "という主旨で、温かく自然に対話を締めくくってください。"
-                            )
-                            with st.chat_message("assistant"):
-                                with st.spinner("対話をまとめています..."):
-                                    try:
-                                        fin_resp = st.session_state.gemini_chat_session.send_message(finish_instruction)
-                                        fin_text = extract_gemini_response_text(fin_resp)
-                                        st.markdown(fin_text)
-                                        st.session_state.chat_messages.append({"role": "assistant", "content": fin_text})
-                                        st.session_state.is_dialogue_finished = True
-                                        st.rerun()
-                                    except Exception:
-                                        st.session_state.is_dialogue_finished = True
-                                        st.rerun()
-                        else:
-                            # まだ未観測の特性がある場合、自然に話題を転換！
-                            unobserved = analysis_res.get("unobserved_traits", [])
-                            target_trait = unobserved[0] if unobserved else "Openness"
-                            target_label = TRAIT_LABELS.get(target_trait, "新しい体験")
-                            
-                            hint_data = TRAIT_TOPIC_HINTS.get(target_trait, TRAIT_TOPIC_HINTS["Openness"])
-                            anecdote = hint_data["anecdote"]
-                            q_phrase = hint_data["question_phrase"]
-                            
-                            switch_instruction = (
-                                f"【システム指示: 人間味のある自然な話題転換】\n"
-                                f"現在のテーマの深掘りは十分です。相手の先ほどの発言に短く共感・リアクションをした上で、\n"
-                                f"あなた自身のちょっとした日常エピソード（前フリ）を語り、相手にオープンな質問を振って自然に別の話題へ切り替えてください。\n\n"
-                                f"【前フリの日常エピソード案】: 「{anecdote}」\n"
-                                f"【相手への尋ね方のイメージ】: 「{q_phrase}」\n\n"
-                                f"【絶対の禁止事項】\n"
-                                f"・「Aですか？それともBですか？」のような2択の選択肢を押し付ける質問は禁止です（尋問・テストに聞こえるため）。\n"
-                                f"・「トラブルの対処法は？」といった面接のような重い質問も禁止です。\n"
-                                f"・友達とカフェでおしゃべりしているような、親しみやすく丁寧なトーンで自然に話をつなげてください。"
-                            )
-                            with st.chat_message("assistant"):
-                                with st.spinner("次の話題へ展開中..."):
-                                    try:
-                                        sw_resp = st.session_state.gemini_chat_session.send_message(switch_instruction)
-                                        sw_text = extract_gemini_response_text(sw_resp)
-                                        st.markdown(sw_text)
-                                        st.session_state.chat_messages.append({"role": "assistant", "content": sw_text})
-                                        st.session_state.topic_turn_count = 0
-                                        st.rerun()
-                                    except Exception as e:
-                                        st.session_state.topic_turn_count = 0
-                                        st.rerun()
+                # 裏で中間解析を実行（次の話題転換や終了判定のための情報更新）
+                # ★ force_switch直後は新しい質問への回答がまだないため終了判定をスキップする
+                utterances = []
+                for i, msg in enumerate(st.session_state.chat_messages):
+                    speaker = "system" if msg["role"] == "assistant" else "user"
+                    utterances.append({
+                        "utterance_id": f"U{i+1:03d}",
+                        "speaker": speaker,
+                        "text": msg["content"]
+                    })
+                
+                user_turns = len([u for u in utterances if u["speaker"] == "user"])
+                if user_turns >= 4 and not did_force_switch:
+                    # force_switchしたターンは解析・終了判定しない（まだ回答を受け取っていないため）
+                    analysis_res = pipeline.run_intermediate_analysis(utterances)
+                    st.session_state.analysis_status = analysis_res
+                    
+                    # 終了条件: 全5特性が満遍なく観測され、かつ十分な根拠（FC >= 7）が集まるまで終了させない
+                    # （ただし長引いた場合のセーフティとしてユーザー発話12往復で終了）
+                    is_ready = analysis_res.get("is_ready_to_finish", False) or (user_turns >= 12)
+                    if is_ready:
+                        # 終了条件達成！
+                        finish_instruction = (
+                            "【システム指示: 対話終了】\n"
+                            "十分な性格判断情報が集まりました。相手の発言に優しく共感した上で、"
+                            "「たくさんお話を聞かせていただきありがとうございました！あなたの普段の様子や考え方がよく分かりました。"
+                            "それではここでインタビューを終了し、分析結果を作成しますね。画面下のボタンから分析結果をご確認ください。」"
+                            "という主旨で、温かく対話を締めくくってください。"
+                        )
+                        fin_resp = st.session_state.gemini_chat_session.send_message(finish_instruction)
+                        fin_text = extract_gemini_response_text(fin_resp)
+                        st.session_state.chat_messages.append({"role": "assistant", "content": fin_text})
+                        st.session_state.is_dialogue_finished = True
+                        st.rerun()
 
 elif st.session_state.step == 'result_score_only':
     st.title("📊 性格分析結果（スコアの提示）")

@@ -88,7 +88,8 @@ PROMPT_STEP2_EXTRACTION = """あなたは性格分析の専門家です。
 
 【抽出ルール】
 1. ユーザ（user）の発話のみを対象とします（システムの発話からは抽出しない）。
-2. 単なる相槌や挨拶ではなく、具体的な行動、経験、習慣、こだわり、思考プロセスが語られている箇所を抽出してください。
+2. 単なる挨拶ではなく、具体的な行動、経験、習慣、こだわり、思考プロセスが語られている箇所を抽出してください。
+   ★重要（文脈補完）: ユーザの発話が「そうですね」「はい」「たしかに」等の短い肯定・同意である場合は、直前のシステム質問の内容を踏まえて文脈を補完し、ユーザ自身の行動事実として抽出してください。（例: システム「友達と連絡を取り合って過ごすことが多いですか？」→ ユーザ「そうですね」の場合、evidence_text:「気持ちを立て直した後は、普段通り友達と連絡を取り合って過ごすことが多い」として抽出する）
 3. 元の発話テキスト（source_text）と、客観的な行動事実として簡潔に要約したテキスト（evidence_text）を対にしてください。
 4. 該当する根拠がない場合は空のリストを返してください。
 
@@ -241,6 +242,9 @@ def extract_json_from_text(text: str) -> Any:
     code_block_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", cleaned, re.IGNORECASE)
     if code_block_match:
         cleaned = code_block_match.group(1).strip()
+
+    # キー名にスペースが混入している場合を正規化（例: "source_text " -> "source_text"）
+    cleaned = re.sub(r'"(\w+)\s+"(\s*:)', r'"\1"\2', cleaned)
         
     try:
         return json.loads(cleaned)
@@ -250,6 +254,8 @@ def extract_json_from_text(text: str) -> Any:
         last_brace = cleaned.rfind('}')
         if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
             sub = cleaned[first_brace:last_brace+1]
+            # キー正規化を再適用
+            sub = re.sub(r'"(\w+)\s+"(\s*:)', r'"\1"\2', sub)
             try:
                 return json.loads(sub)
             except json.JSONDecodeError:
@@ -259,6 +265,7 @@ def extract_json_from_text(text: str) -> Any:
         last_bracket = cleaned.rfind(']')
         if first_bracket != -1 and last_bracket != -1 and last_bracket > first_bracket:
             sub = cleaned[first_bracket:last_bracket+1]
+            sub = re.sub(r'"(\w+)\s+"(\s*:)', r'"\1"\2', sub)
             try:
                 return json.loads(sub)
             except json.JSONDecodeError:
@@ -528,8 +535,8 @@ def run_intermediate_analysis(
         observed_traits = [t for t in ALL_BIG_FIVE_TRAITS if t in observed_traits_set]
         unobserved_traits = [t for t in ALL_BIG_FIVE_TRAITS if t not in observed_traits_set]
         
-        # 終了判定基準: 4つ以上の特性が観測された、または独立クラスタ（FC）が5個以上得られたら終了準備完了
-        is_ready = (len(observed_traits) >= 4) or (len(facet_clusters) >= 5)
+        # 終了判定基準: 全5特性が網羅され、かつ十分な根拠（FC >= 7個以上、各特性2〜3個が目安）が得られるまで終了させない
+        is_ready = (len(observed_traits) >= 5) and (len(facet_clusters) >= 7)
         
         return {
             "observed_traits": observed_traits,
